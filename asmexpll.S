@@ -45,6 +45,14 @@
 
 
 .section .text
+
+
+.macro NEXT cnt:req
+    ADVANCE_PC \cnt
+    FETCH_DECODE
+    DISPATCH
+.endm
+
 .macro FETCH_DECODE
     FETCH_CHECKED
     DECODE
@@ -98,6 +106,9 @@ handle_state_is_not_running:
 
 .macro DISPATCH
     jmp     *(routines, opcode64, 8)
+    # shl    $8, %rdx      # Умножить номер функции на 0x100
+    # add    %rdi, %rdx    # Добавить базовый адрес первой функции
+    # jmp    *%rdx         # Перейти по адресу, хранящемуся в %rdx
 .endm
 
 
@@ -261,6 +272,17 @@ sz_stack_underflow:
 
 
 #### ROUTINES ####
+/*
+        &srv_Break, &srv_Nop, &srv_Halt, &srv_Push, &srv_Print,
+        &sr_Jne, &srv_Swap, &srv_Dup, &srv_Je, &srv_Inc,
+        &sr_Add, &srv_Sub, &sr_Mul, &sr_Rand, &sr_Dec,
+        &srv_Drop, &srv_Over, &srv_Mod, &srv_Jump,
+        &sr_And, &sr_Or, &sr_Xor,
+        &sr_SHL, &sr_SHR,
+        &sr_SQRT,
+        &sr_Rot,
+        &sr_Pick
+*/
 
 
 .macro RTN name
@@ -297,9 +319,7 @@ end_of_\name:
 
     RTN Nop     ## <- NB! Not used
     # Do nothing
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
     NTR Nop
 
 
@@ -316,9 +336,7 @@ end_of_\name:
     .if OPT_CACHED == 0
       PUSH_IMM  immed64
     .endif
-    ADVANCE_PC 2
-    FETCH_DECODE
-    DISPATCH
+    NEXT 2
     NTR Push
 
 
@@ -333,9 +351,7 @@ end_of_\name:
     .if OPT_CACHED == 0
       POP_IMM   immed64
     .endif
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
     NTR Drop
 
 
@@ -361,9 +377,7 @@ end_of_\name:
         VM_PUSH opcode64 immed64 immed64
       .endif
     .endif
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
     NTR Dup
 
 
@@ -394,9 +408,7 @@ end_of_\name:
         VM_PUSH opcode64 immed64 acc
       .endif
     .endif
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
     NTR Swap
 
 
@@ -422,9 +434,7 @@ end_of_\name:
         VM_PUSH opcode64 acc immed64 acc
       .endif
     .endif
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
     NTR Over
 
 
@@ -447,9 +457,7 @@ end_of_\name:
         PUSH_IMM immed64
       .endif
     .endif
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
     NTR Sub
 
 
@@ -472,9 +480,7 @@ end_of_\name:
         PUSH_IMM immed64
       .endif
     .endif
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
     NTR Inc
 
 
@@ -511,9 +517,7 @@ end_of_\name:
       div     immed64      # rdx:rax / operand  -> rax, rdx
       PUSH_IMM %rdx
     .endif
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
 
 handle_divide_zero:
     mov     two, state
@@ -533,9 +537,7 @@ sz_divide_zero:
     # sal     $2, immed32
     movsx   immed32, immed64
     add     immed64, pc
-    ADVANCE_PC 2
-    FETCH_DECODE
-    DISPATCH
+    NEXT 2
     NTR Jump
 
 
@@ -547,15 +549,11 @@ sz_divide_zero:
       BAIL_ON_ERROR
       test    acc, acc
       je      3f
-      ADVANCE_PC 2
-      FETCH_DECODE
-      DISPATCH
+      NEXT 2
 3:
       movsx   immed32, immed64
       add     immed64, pc
-      ADVANCE_PC 2
-      FETCH_DECODE
-      DISPATCH
+      NEXT 2
     .endif
 
     .if OPT_CACHED == 1
@@ -564,15 +562,11 @@ sz_divide_zero:
       BAIL_ON_ERROR
       test    acc, acc
       je      2f
-      ADVANCE_PC 2
-      FETCH_DECODE
-      DISPATCH
+      NEXT 2
 2:
       movsx   immed32, immed64
       add     immed64, pc
-      ADVANCE_PC 2
-      FETCH_DECODE
-      DISPATCH
+      NEXT 2
     .endif
 
     .if OPT_CACHED == 0
@@ -580,15 +574,11 @@ sz_divide_zero:
       BAIL_ON_ERROR
       test    acc, acc
       je      1f
-      ADVANCE_PC 2
-      FETCH_DECODE
-      DISPATCH
+      NEXT 2
 1:
       movsx   immed32, immed64
       add     immed64, pc
-      ADVANCE_PC 2
-      FETCH_DECODE
-      DISPATCH
+      NEXT 2
     .endif
     NTR Je
 
@@ -627,9 +617,7 @@ sz_divide_zero:
     pop     %rcx
     pop     %rsi
     pop     %rdi
-    ADVANCE_PC 1
-    FETCH_DECODE
-    DISPATCH
+    NEXT 1
     NTR Print
 
 
