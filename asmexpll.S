@@ -105,10 +105,10 @@ handle_state_is_not_running:
 
 
 .macro DISPATCH
-    jmp     *(routines, opcode64, 8)
-    # shl    $8, %rdx      # Умножить номер функции на 0x100
-    # add    %rdi, %rdx    # Добавить базовый адрес первой функции
-    # jmp    *%rdx         # Перейти по адресу, хранящемуся в %rdx
+    # jmp     *(routines, opcode64, 8)
+    shl    $8, opcode64      # Умножить номер функции на 0x100
+    lea    (routines, opcode64), opcode64  # Добавить базовый адрес первой функции
+    jmp    *opcode64         # Перейти по адресу, хранящемуся в %rdx
 .endm
 
 
@@ -273,15 +273,33 @@ sz_stack_underflow:
 
 #### ROUTINES ####
 /*
-        &srv_Break, &srv_Nop, &srv_Halt, &srv_Push, &srv_Print,
-        &sr_Jne, &srv_Swap, &srv_Dup, &srv_Je, &srv_Inc,
-        &sr_Add, &srv_Sub, &sr_Mul, &sr_Rand, &sr_Dec,
-        &srv_Drop, &srv_Over, &srv_Mod, &srv_Jump,
-        &sr_And, &sr_Or, &sr_Xor,
-        &sr_SHL, &sr_SHR,
-        &sr_SQRT,
-        &sr_Rot,
-        &sr_Pick
+    &srv_Break,
+    &srv_Nop,
+    &srv_Halt,
+    &srv_Push,
+    &srv_Print,
+    &sr_Jne,
+    &srv_Swap,
+    &srv_Dup,
+    &srv_Je,
+    &srv_Inc,
+    &sr_Add,
+    &srv_Sub,
+    &sr_Mul,
+    &sr_Rand,
+    &sr_Dec,
+    &srv_Drop,
+    &srv_Over,
+    &srv_Mod,
+    &srv_Jump,
+    &sr_And,
+    &sr_Or,
+    &sr_Xor,
+    &sr_SHL,
+    &sr_SHR,
+    &sr_SQRT,
+    &sr_Rot,
+    &sr_Pick
 */
 
 
@@ -309,18 +327,18 @@ end_of_\name:
     NTR Break
 
 
+    RTN Nop     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Nop
+
+
     RTN Halt
     # No need to dispatch after Halt
     mov     one, state
     lea     sz_system_halted(%rip), acc
     jmp     save_rets_and_exit
     NTR Halt
-
-
-    RTN Nop     ## <- NB! Not used
-    # Do nothing
-    NEXT 1
-    NTR Nop
 
 
     RTN Push
@@ -340,45 +358,53 @@ end_of_\name:
     NTR Push
 
 
-    RTN Drop
+    RTN Print
     .if OPT_CACHED == 2
-      movq      subtop, top
-      POP_IMM   subtop
+      movq  top, acc
+      movq    subtop, top
+      POP_IMM subtop
     .endif
     .if OPT_CACHED == 1
-      POP_IMM   top
+      movq  top, acc
+      POP_IMM top
     .endif
     .if OPT_CACHED == 0
-      POP_IMM   immed64
+      POP_IMM acc
     .endif
+    BAIL_ON_ERROR
+    push    %rdi
+    push    %rsi
+    push    %rcx
+    push    %rdx
+    push    %r8
+    push    %r9
+    push    %r10
+    push    %r11
+    lea     sz_fmt_str(%rip), %rdi
+    movq    acc, %rsi
+    xor     acc, acc
+    call    printf
+    pop     %r11
+    pop     %r10
+    pop     %r9
+    pop     %r8
+    pop     %rdx
+    pop     %rcx
+    pop     %rsi
+    pop     %rdi
     NEXT 1
-    NTR Drop
+    .section .data
+sz_fmt_str:
+    .asciz "[%d]\n"
+    .quad 0
+    .section .text
+    NTR Print
 
 
-    RTN Dup     ## <- NB! Not used
-    .if OPT_CACHED == 2
-      PUSH_IMM  subtop
-      movq      top, subtop
-    .endif
-    .if OPT_CACHED == 1
-      PUSH_IMM   top
-      BAIL_ON_ERROR
-    .endif
-    .if OPT_CACHED == 0
-      .if OPT_ON_SITE == 1
-        # Возможно этот способ медленее, чем вариант
-        # из else, но т.к. эта RTN не используется,
-        # то это никак не проверить - пусть будет так
-        mov (sp), immed64
-        PUSH_IMM immed64
-      .else
-        POP_IMM immed64
-        BAIL_ON_ERROR
-        VM_PUSH opcode64 immed64 immed64
-      .endif
-    .endif
-    NEXT 1
-    NTR Dup
+    RTN Jne     ## <- NB! Not used
+    # Do nothing
+    NEXT 2
+    NTR Jne
 
 
     RTN Swap
@@ -412,30 +438,101 @@ end_of_\name:
     NTR Swap
 
 
-    RTN Over
+    RTN Dup     ## <- NB! Not used
     .if OPT_CACHED == 2
-      xchg  top, subtop
-      PUSH_IMM  top
+      PUSH_IMM  subtop
+      movq      top, subtop
     .endif
     .if OPT_CACHED == 1
-      PUSH_IMM  top
-      movq  8(sp), top
+      PUSH_IMM   top
+      BAIL_ON_ERROR
     .endif
     .if OPT_CACHED == 0
       .if OPT_ON_SITE == 1
-         movq       8(sp), acc
-         PUSH_IMM   acc
+        # Возможно этот способ медленее, чем вариант
+        # из else, но т.к. эта RTN не используется,
+        # то это никак не проверить - пусть будет так
+        mov (sp), immed64
+        PUSH_IMM immed64
       .else
-        # мы можем использовать opcode64 как tmpreg, так как
-        # после FETCH он не используется и будет перезаписан
-        # в следующем FETCH
-        VM_POP opcode64 immed64 acc
+        POP_IMM immed64
         BAIL_ON_ERROR
-        VM_PUSH opcode64 acc immed64 acc
+        VM_PUSH opcode64 immed64 immed64
       .endif
     .endif
     NEXT 1
-    NTR Over
+    NTR Dup
+
+
+    RTN Je
+    .if OPT_CACHED == 2
+      movq    top, acc
+      movq    subtop, top
+      POP_IMM subtop
+      BAIL_ON_ERROR
+      test    acc, acc
+      je      3f
+      NEXT 2
+3:
+      movsx   immed32, immed64
+      add     immed64, pc
+      NEXT 2
+    .endif
+
+    .if OPT_CACHED == 1
+      movq    top, acc
+      POP_IMM top
+      BAIL_ON_ERROR
+      test    acc, acc
+      je      2f
+      NEXT 2
+2:
+      movsx   immed32, immed64
+      add     immed64, pc
+      NEXT 2
+    .endif
+
+    .if OPT_CACHED == 0
+      POP_IMM acc
+      BAIL_ON_ERROR
+      test    acc, acc
+      je      1f
+      NEXT 2
+1:
+      movsx   immed32, immed64
+      add     immed64, pc
+      NEXT 2
+    .endif
+    NTR Je
+
+
+    RTN Inc
+    .if OPT_CACHED == 2
+      inc   top
+    .endif
+    .if OPT_CACHED == 1
+      inc   top
+    .endif
+    .if OPT_CACHED == 0
+      .if OPT_ON_SITE == 1
+        incq    (sp)
+      .else
+        POP_IMM immed64
+        BAIL_ON_ERROR
+        inc     immed64
+        # Тут можно оптимизировать проверки, уже выполненные в POP_IMM
+        # а еще лучше - изменять прямо на месте, в памяти
+        PUSH_IMM immed64
+      .endif
+    .endif
+    NEXT 1
+    NTR Inc
+
+
+    RTN Add     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Add
 
 
     RTN Sub
@@ -461,27 +558,63 @@ end_of_\name:
     NTR Sub
 
 
-    RTN Inc
+    RTN Mul     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Mul
+
+
+    RTN Rand     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Rand
+
+
+    RTN Dec     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Dec
+
+
+    RTN Drop
     .if OPT_CACHED == 2
-      inc   top
+      movq      subtop, top
+      POP_IMM   subtop
     .endif
     .if OPT_CACHED == 1
-      inc   top
+      POP_IMM   top
+    .endif
+    .if OPT_CACHED == 0
+      POP_IMM   immed64
+    .endif
+    NEXT 1
+    NTR Drop
+
+
+    RTN Over
+    .if OPT_CACHED == 2
+      xchg  top, subtop
+      PUSH_IMM  top
+    .endif
+    .if OPT_CACHED == 1
+      PUSH_IMM  top
+      movq  8(sp), top
     .endif
     .if OPT_CACHED == 0
       .if OPT_ON_SITE == 1
-        incq    (sp)
+         movq       8(sp), acc
+         PUSH_IMM   acc
       .else
-        POP_IMM immed64
+        # мы можем использовать opcode64 как tmpreg, так как
+        # после FETCH он не используется и будет перезаписан
+        # в следующем FETCH
+        VM_POP opcode64 immed64 acc
         BAIL_ON_ERROR
-        inc     immed64
-        # Тут можно оптимизировать проверки, уже выполненные в POP_IMM
-        # а еще лучше - изменять прямо на месте, в памяти
-        PUSH_IMM immed64
+        VM_PUSH opcode64 acc immed64 acc
       .endif
     .endif
     NEXT 1
-    NTR Inc
+    NTR Over
 
 
     RTN Mod
@@ -541,91 +674,46 @@ sz_divide_zero:
     NTR Jump
 
 
-    RTN Je
-    .if OPT_CACHED == 2
-      movq    top, acc
-      movq    subtop, top
-      POP_IMM subtop
-      BAIL_ON_ERROR
-      test    acc, acc
-      je      3f
-      NEXT 2
-3:
-      movsx   immed32, immed64
-      add     immed64, pc
-      NEXT 2
-    .endif
-
-    .if OPT_CACHED == 1
-      movq    top, acc
-      POP_IMM top
-      BAIL_ON_ERROR
-      test    acc, acc
-      je      2f
-      NEXT 2
-2:
-      movsx   immed32, immed64
-      add     immed64, pc
-      NEXT 2
-    .endif
-
-    .if OPT_CACHED == 0
-      POP_IMM acc
-      BAIL_ON_ERROR
-      test    acc, acc
-      je      1f
-      NEXT 2
-1:
-      movsx   immed32, immed64
-      add     immed64, pc
-      NEXT 2
-    .endif
-    NTR Je
-
-
-    RTN Print
-    .if OPT_CACHED == 2
-      movq  top, acc
-      movq    subtop, top
-      POP_IMM subtop
-    .endif
-    .if OPT_CACHED == 1
-      movq  top, acc
-      POP_IMM top
-    .endif
-    .if OPT_CACHED == 0
-      POP_IMM acc
-    .endif
-    BAIL_ON_ERROR
-    push    %rdi
-    push    %rsi
-    push    %rcx
-    push    %rdx
-    push    %r8
-    push    %r9
-    push    %r10
-    push    %r11
-    lea     sz_fmt_str(%rip), %rdi
-    movq    acc, %rsi
-    xor     acc, acc
-    call    printf
-    pop     %r11
-    pop     %r10
-    pop     %r9
-    pop     %r8
-    pop     %rdx
-    pop     %rcx
-    pop     %rsi
-    pop     %rdi
+    RTN And     ## <- NB! Not used
+    # Do nothing
     NEXT 1
-    NTR Print
+    NTR And
 
 
-    .section .data
-sz_fmt_str:
-    .asciz "[%d]\n"
-    .quad 0
+    RTN Or      ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Or
 
+    RTN Xor     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Xor
+
+    RTN SHL     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR SHL
+
+    RTN SHR     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR SHR
+
+    RTN SQRT        ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR SQRT
+
+    RTN Rot     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Rot
+
+    RTN Pic     ## <- NB! Not used
+    # Do nothing
+    NEXT 1
+    NTR Pic
 
 
 #### MAIN ####
@@ -666,6 +754,8 @@ asm_main:
     mov     sp, stack_max
     mov     sp, stack_min
     sub     $0x100, stack_min  # STACK_CAPACITY = 32
+
+    lea     srv_Break(%rip), %rdi
 
     FETCH_DECODE
     DISPATCH
