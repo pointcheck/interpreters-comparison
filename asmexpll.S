@@ -266,10 +266,16 @@ sz_stack_underflow:
 .macro RTN name
     .global srv_\name
     .type srv_\name, @function
+    .align 0x100
 srv_\name:
     .if DBGCNT
     incq    cnt_\name(%rip)
     .endif
+.endm
+
+.macro NTR name
+end_of_\name:
+    .set size_of_\name, end_of_\name - srv_\name
 .endm
 
 
@@ -278,6 +284,7 @@ srv_\name:
     mov     two, state
     lea     sz_system_break(%rip), acc
     jmp     save_rets_and_exit
+    NTR Break
 
 
     RTN Halt
@@ -285,6 +292,7 @@ srv_\name:
     mov     one, state
     lea     sz_system_halted(%rip), acc
     jmp     save_rets_and_exit
+    NTR Halt
 
 
     RTN Nop     ## <- NB! Not used
@@ -292,6 +300,7 @@ srv_\name:
     ADVANCE_PC 1
     FETCH_DECODE
     DISPATCH
+    NTR Nop
 
 
     RTN Push
@@ -310,6 +319,7 @@ srv_\name:
     ADVANCE_PC 2
     FETCH_DECODE
     DISPATCH
+    NTR Push
 
 
     RTN Drop
@@ -326,6 +336,7 @@ srv_\name:
     ADVANCE_PC 1
     FETCH_DECODE
     DISPATCH
+    NTR Drop
 
 
     RTN Dup     ## <- NB! Not used
@@ -353,6 +364,7 @@ srv_\name:
     ADVANCE_PC 1
     FETCH_DECODE
     DISPATCH
+    NTR Dup
 
 
     RTN Swap
@@ -385,6 +397,7 @@ srv_\name:
     ADVANCE_PC 1
     FETCH_DECODE
     DISPATCH
+    NTR Swap
 
 
     RTN Over
@@ -412,6 +425,7 @@ srv_\name:
     ADVANCE_PC 1
     FETCH_DECODE
     DISPATCH
+    NTR Over
 
 
     RTN Sub
@@ -436,6 +450,7 @@ srv_\name:
     ADVANCE_PC 1
     FETCH_DECODE
     DISPATCH
+    NTR Sub
 
 
     RTN Inc
@@ -460,6 +475,7 @@ srv_\name:
     ADVANCE_PC 1
     FETCH_DECODE
     DISPATCH
+    NTR Inc
 
 
     RTN Mod
@@ -510,6 +526,8 @@ sz_divide_zero:
     .asciz "divide by zero"
     .section .text
 
+    NTR Mod
+
 
     RTN Jump
     # sal     $2, immed32
@@ -518,6 +536,7 @@ sz_divide_zero:
     ADVANCE_PC 2
     FETCH_DECODE
     DISPATCH
+    NTR Jump
 
 
     RTN Je
@@ -571,6 +590,7 @@ sz_divide_zero:
       FETCH_DECODE
       DISPATCH
     .endif
+    NTR Je
 
 
     RTN Print
@@ -610,6 +630,8 @@ sz_divide_zero:
     ADVANCE_PC 1
     FETCH_DECODE
     DISPATCH
+    NTR Print
+
 
     .section .data
 sz_fmt_str:

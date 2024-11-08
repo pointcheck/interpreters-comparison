@@ -70,6 +70,9 @@ asmexp: CFLAGS += -foptimize-sibling-calls
 asmexp: asmexpll.o asmexp.o
 	$(CC) -g -pg $^ -lm -o $@
 
+size: asmexp
+	nm asmexp | grep size_of_
+
 prof:
 	gprof -b asmopt gmon.out
 
