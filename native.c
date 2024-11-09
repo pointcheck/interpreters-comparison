@@ -36,6 +36,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 extern const Instr_t Primes[];
 
 int main() {
+    int res = 0;
     /* This program cannot be used for performance comparisons if the target
        program chosen for simulation is different from Primes.
        Warn and refuse to work instead of giving user bogus numbers */
@@ -47,8 +48,8 @@ int main() {
         return 1;
     }
 
-    for (int i = 2; i < 100000; i++) {
-        bool is_prime = true;
+    for (volatile int i = 2; i < 300000; i++) {
+        volatile bool is_prime = true;
         for (int divisor = 2; divisor < i; divisor++) {
             if (i % divisor == 0) {
                 is_prime = false;
@@ -56,7 +57,8 @@ int main() {
             }
         }
         if (is_prime)
-            printf("[%d]\n", i);
+		res++;
+        //   printf("[%d]\n", i);
     }
-    return 0;
+    return res;
 }
